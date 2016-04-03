@@ -54,7 +54,7 @@ void Gauss(GFSymbol* pMatrix
 				if (pMatrix[j * NumOfColumns + C] != 0)
 				{
 					Success = true;
-					gfDeg = gf.pLogTable[pMatrix[i*NumOfColumns + C]];
+					gfDeg = gf.pLogTable[pMatrix[j*NumOfColumns + C]];
 					for (unsigned k = 0; k < NumOfColumns; ++k)
 						pMatrix[j*NumOfColumns + k] = gf.divideConst(pMatrix[j*NumOfColumns + k], gfDeg);
 					if (j > i)
