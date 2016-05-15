@@ -1,5 +1,5 @@
 #include <iostream>
-#include "NBLdpcCodec.h"
+#include "NBLdpcDecoder.h"
 #include "NBLdpcBuilder.h"
 #include <algorithm>
 #include <random>
@@ -17,12 +17,17 @@ void Usage()
 {
 	cout << "Usage:\n"
 		<< "B Length Redundancy Extension [R RowVals ColVals] specFileName\n"
-		<< "T specFileName NumOfIterations\n";
+		<< "T specFileName NumOfIterations\n"
+		<< "D specFileName NumOfDecoderIterations NumOfRemainingVals SNR NumOfErrors NumOfIterations\n";
+}
+
+inline float CalculateSigma(float SNR, unsigned Length, unsigned BinDimension) {
+	return sqrtf(1.f / (2.f * powf(10.f, (SNR / 10.f)) * ((float)BinDimension / Length)));
 }
 
 int main()
 {
-	if(__argc != 9 && __argc != 4)
+	if(__argc != 9 && __argc != 4 && __argc != 8)
 	{
 		Usage();
 		return 0;
@@ -62,17 +67,62 @@ int main()
 			bool result = codec.VerifyCodeword(pEncoded);
 			if (!result)
 			{
-				cerr << "Verification fail at iteration #" << i << endl;
+				cout << "Verification fail at iteration #" << i << endl;
 				errNum++;
 			}			
 		}
 		if (!errNum)
-			cout << "Verification successful" << endl;
+			cerr << "Verification successful" << endl;
 		else
-			cout << "Verification failed" << endl;
+			cerr << "Verification failed" << endl;
 
 		delete[] pData;
 		delete[] pEncoded;
+	}
+	else if (mode == 'D')
+	{
+		specFileName = NextArgument();
+		unsigned NumOfDecoderIterations = stoi(NextArgument());
+		unsigned NumOfRemainingVals = stoi(NextArgument());
+		float SNR = stof(NextArgument());
+		unsigned NumOfErrors = stoi(NextArgument());
+		unsigned NumOfIterations = stoi(NextArgument());
+
+		NBLdpcDecoder codec(specFileName, NumOfRemainingVals);
+		Length = codec.GetLength();
+		Extension = codec.GetFieldOrder();
+		unsigned Dimension = codec.GetDimension();
+		float Sigma = CalculateSigma(SNR, Length, Dimension * Extension);
+		mt19937 engine(time(nullptr));
+		normal_distribution<float> noiseGen(0, Sigma);
+		uniform_int_distribution<int> dataGen(0, codec.GetMaxFieldElement());
+		GFSymbol *pData = new GFSymbol[Dimension];
+		GFSymbol *pEncoded = new GFSymbol[Length];
+		GFSymbol *pDecoded = new GFSymbol[Length];
+		float *pNoisyData = new float[Length];
+		unsigned currentErrors = 0;
+		unsigned it = 0;
+		for (it; it < NumOfIterations && currentErrors < NumOfErrors; ++it)
+		{
+			for (unsigned i = 0; i < Dimension; i++)
+				pData[i] = dataGen(engine);
+			codec.Encode(pData, pEncoded);
+			for (unsigned i = 0; i < Length; i++)
+				pNoisyData[i] = codec.Modulate(pEncoded[i]) + noiseGen(engine);
+			codec.Decode(pNoisyData, pDecoded, NumOfDecoderIterations, Sigma * Sigma);
+
+			if (memcmp(pDecoded, pEncoded, sizeof(GFSymbol) * Length) != 0)
+				currentErrors++;
+			
+			if (it > 0 && it % 1000 == 0)
+				cout << it << ' ' << (static_cast<float>(currentErrors) / it) <<  endl;
+		}
+		cerr << it << ' ' << (static_cast<float>(currentErrors) / it) << endl;
+		system("pause");
+		delete[] pData;
+		delete[] pEncoded;
+		delete[] pDecoded;
+		delete[] pNoisyData;
 	}
 	return 0;
 }
