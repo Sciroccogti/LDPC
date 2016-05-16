@@ -31,17 +31,17 @@ struct GaloisField
 		BuildGF(extension, pGF, pLogTable);
 	}
 	// a * b in GF(2^m)
-	inline GFSymbol multiply(GFSymbol a, GFSymbol b)
+	inline GFSymbol multiply(GFSymbol a, GFSymbol b) const
 	{
 		return (a && b) ? pGF[pLogTable[a] + pLogTable[b]] : 0;
 	}
 	// a * \alpha^x in GF(2^m)
-	inline GFSymbol multiplyConst(GFSymbol a, int x)
+	inline GFSymbol multiplyConst(GFSymbol a, int x) const
 	{
 		return (a) ? pGF[pLogTable[a] + x] : 0;
 	}
 	// return y: \alpha^y = a / \alpha^x in GF(2^m)
-	inline int divideConstDeg(GFSymbol a, int x)
+	inline int divideConstDeg(GFSymbol a, int x) const
 	{
 		if (a)
 		{
@@ -52,7 +52,7 @@ struct GaloisField
 			return -1;
 	}
 	// a / \alpha^x in GF(2^m)
-	inline GFSymbol divideConst(GFSymbol a, int x)
+	inline GFSymbol divideConst(GFSymbol a, int x) const
 	{
 		if (a)
 		{
@@ -63,12 +63,12 @@ struct GaloisField
 			return 0;
 	}
 	// for nonzero a return b: a * b = 1 mod 2^m
-	inline GFSymbol inverse(GFSymbol a)
+	inline GFSymbol inverse(GFSymbol a) const
 	{
 		return (a != 1) ? pGF[FieldSize_1 - pLogTable[a]] : 1;
 	}
 	// for nonzero a return x: a * \alpha^x = 1 mod 2^m
-	inline GFSymbol inverseDeg(GFSymbol a)
+	inline GFSymbol inverseDeg(GFSymbol a) const
 	{
 		return (a != 1) ? FieldSize_1 - pLogTable[a] : 0;
 	}

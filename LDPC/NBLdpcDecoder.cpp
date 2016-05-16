@@ -65,10 +65,19 @@ NBLdpcDecoder::NBLdpcDecoder(std::string specFile, unsigned NumOfRemainingLLRs)
 //compute log(1+exp(-x)), x>=0;
 inline double JacobiLog(double x)
 {
-	if (x<5.5)
-		return .131478060787483 + (3.43245248951091 - 1.74351875423031*x) / (6.11620503468962 + (2.21612896897222 + x)*x);
-	else
+	if (x >= 4.4)
 		return 0;
+	if (x < 0.5)
+		return 0.7 - x / 2.;
+	if (x < 1.6)
+		return 0.575 - x / 4.;
+	if (x < 2.2)
+		return 0.375 - x / 8.;
+	if (x < 3.2)
+		return 0.2375 - x / 16.;
+	if (x < 4.4)
+		return 0.1375 - x / 32.;
+	//return (x > 5.5) ? 0 : .131478060787483 + (3.43245248951091 - 1.74351875423031*x) / (6.11620503468962 + (2.21612896897222 + x)*x);
 }
 
 inline double LogSum(const double& LogA, const double& LogB)
@@ -76,7 +85,7 @@ inline double LogSum(const double& LogA, const double& LogB)
 	return (LogA > LogB) ? LogA + JacobiLog(LogA - LogB) : LogB + JacobiLog(LogB - LogA);
 }
 
-void BoxPlus(tLLRPair* L1, GFSymbol a1, tLLRPair* L2, GFSymbol a2, GaloisField& gf, tLLRPair* Res)
+/*void BoxPlus(tLLRPair* L1, GFSymbol a1, tLLRPair* L2, GFSymbol a2, GaloisField& gf, tLLRPair* Res)
 {
 	GFSymbol invA1 = gf.inverseDeg(a1), invA2 = gf.inverseDeg(a2);
 	double tmp = LogSum(0, L1[1] + L2[gf.multiplyConst(a1, gf.inverseDeg(a2))]);
@@ -88,9 +97,32 @@ void BoxPlus(tLLRPair* L1, GFSymbol a1, tLLRPair* L2, GFSymbol a2, GaloisField& 
 	{
 		Res[i] = LogSum(L2[gf.multiplyConst(i, invA2)], L1[1] + L2[gf.multiplyConst(i ^ a1, invA2)]);
 		for (unsigned j = 2; j <= gf.FieldSize_1; ++j)
-			Res[i] = LogSum(Res[i], L1[j] + L2[gf.multiplyConst(i ^ gf.multiplyConst(a1, gf.pLogTable[i]), invA2)]);
+			Res[i] = LogSum(Res[i], L1[j] + L2[gf.multiplyConst(i ^ gf.multiplyConst(a1, gf.pLogTable[j]), invA2)]);
 		Res[i] -= tmp;
 	}
+}*/
+
+void BoxPlus(tLLRPair* L1, tLLRPair* L2, tLLRPair* Res, unsigned Len_1)
+{
+	double tmp = LogSum(0, L1[1] + L2[1]);
+	for (unsigned i = 2; i <= Len_1; ++i)
+		tmp = LogSum(tmp, L1[i] + L2[i]);
+
+	Res[0] = 0;
+	for (unsigned i = 1; i <= Len_1; ++i)
+	{
+		Res[i] = LogSum(L2[i], L1[1] + L2[i ^ 1]);
+		for (unsigned j = 2; j <= Len_1; ++j)
+			Res[i] = LogSum(Res[i], L1[j] + L2[i ^ j]);
+		Res[i] -= tmp;
+	}
+}
+
+void PermuteVec(tLLRPair* pIn, tLLRPair *pOut, GaloisField& gf, const GFSymbol& sym)
+{
+	pOut[0] = pIn[0];
+	for (unsigned i = 1; i <= gf.FieldSize_1; ++i)
+		pOut[gf.multiplyConst(i, sym)] = pIn[i];
 }
 
 bool NBLdpcDecoder::Decode(float* pNoisyData, GFSymbol* pCodeword, unsigned NumOfIterations, float m_NoiseVariance)
@@ -100,8 +132,8 @@ bool NBLdpcDecoder::Decode(float* pNoisyData, GFSymbol* pCodeword, unsigned NumO
 		for (unsigned j = 0; j <= m_GF.FieldSize_1; ++j)
 			m_ppInputLLRs[i][j] = (m_pConstellation[0] - m_pConstellation[j])*(m_pConstellation[j] + m_pConstellation[0] - 2 * pNoisyData[i]) / (2 * m_NoiseVariance);//std::make_pair((m_pConstellation[0] - m_pConstellation[j])*(m_pConstellation[i] + m_pConstellation[0] - 2 * pNoisyData[i]) / (2 * m_NoiseVariance), j);
 		//std::sort(m_ppInputLLRs[i], m_ppInputLLRs[i] + m_GF.FieldSize_1 + 1, std::greater<tLLRPair>());
-		for (unsigned j = 0; j < m_pVarDegrees[i]; ++j)
-			memcpy(m_ppVarInputs[i][j], m_ppInputLLRs[i], sizeof(tLLRPair) * m_NumOfComponents);		
+		/*for (unsigned j = 0; j < m_pVarDegrees[i]; ++j)
+			memcpy(m_ppVarInputs[i][j], m_ppInputLLRs[i], sizeof(tLLRPair) * m_NumOfComponents);		*/
 	}
 	for (unsigned i = 0; i < m_NumOfChecks; ++i)
 		for (unsigned j = 0; j < m_pCheckDegrees[i]; ++j)
@@ -151,32 +183,60 @@ bool NBLdpcDecoder::Decode(float* pNoisyData, GFSymbol* pCodeword, unsigned NumO
 		for(unsigned j = 0; j < m_NumOfChecks; ++j)
 		{
 			//Calculate \sigma and \rho distributions (see H. Wymeersch, H. Steendam and M. Moeneclaey "Log-domain decoding of LDPC codes over GF(q)")
-			for(unsigned k = 0; k <= m_GF.FieldSize_1; ++k)
+			//\sigmas in m_ppCheckInputs, \rhos in m_ppCheckOutputs
+			auto&& ind0 = m_ppChecks2Var[j][0];
+			auto&& indL = m_ppChecks2Var[j][m_pCheckDegrees[j] - 1]; 
+			
+			PermuteVec(m_ppVarInputs[ind0.first][ind0.second], m_ppCheckInputs[j][0], 
+				m_GF, m_GF.pLogTable[m_ppCheckConstraints[j][0].second]);				
+			PermuteVec(m_ppVarInputs[indL.first][indL.second], m_ppCheckOutputs[j][m_pCheckDegrees[j] - 1],
+				m_GF, m_GF.pLogTable[m_ppCheckConstraints[j][m_pCheckDegrees[j] - 1].second]);
+			
+			/*for(unsigned k = 0; k <= m_GF.FieldSize_1; ++k)
 			{
-				auto&& ind0 = m_ppChecks2Var[j][0];
-				auto&& indL = m_ppChecks2Var[j][m_pCheckDegrees[j] - 1];
-				m_ppCheckInputs[j][0][m_GF.multiplyConst(k, m_ppCheckConstraints[j][0].second)] = m_ppVarInputs[ind0.first][ind0.second][k];
-				m_ppCheckInputs[j][m_pCheckDegrees[j] - 1][m_GF.multiplyConst(k, m_ppCheckConstraints[j][m_pCheckDegrees[j] - 1].second)] = m_ppVarInputs[indL.first][indL.second][k];
-			}
+				m_ppCheckInputs[j][0]
+					[m_GF.multiplyConst(k, m_GF.pLogTable[m_ppCheckConstraints[j][0].second])]
+				= m_ppVarInputs[ind0.first][ind0.second][k]; 
+				m_ppCheckOutputs[j][m_pCheckDegrees[j] - 1]
+					[m_GF.multiplyConst(k, m_GF.pLogTable[m_ppCheckConstraints[j][m_pCheckDegrees[j] - 1].second])] 
+				= m_ppVarInputs[indL.first][indL.second][k];
+			}*/
+
 			for(unsigned k = 1; k < m_pCheckDegrees[j]; ++k)
 			{
-				auto&& ind = m_ppChecks2Var[j][k];
-				BoxPlus(m_ppCheckInputs[j][k - 1], 1, m_ppVarInputs[ind.first][ind.second], m_GF.pGF[m_ppCheckConstraints[j][k].second], m_GF, m_ppCheckInputs[j][k]);
-				BoxPlus(m_ppCheckOutputs[j][m_pCheckDegrees[j] - k - 1], 1, m_ppVarInputs[ind.first][ind.second], m_ppCheckConstraints[j][k].second, m_GF, m_ppCheckOutputs[j][m_pCheckDegrees[j] - k]);
+				auto&& ind1 = m_ppChecks2Var[j][k];
+				PermuteVec(m_ppVarInputs[ind1.first][ind1.second], m_ppVarOutputs[0][0], 
+					m_GF, m_GF.pLogTable[m_ppCheckConstraints[j][k].second]);
+				BoxPlus(m_ppCheckInputs[j][k - 1], m_ppVarOutputs[0][0],
+					m_ppCheckInputs[j][k], m_GF.FieldSize_1);
+
+				auto&& ind2 = m_ppChecks2Var[j][m_pCheckDegrees[j] - k - 1];
+				PermuteVec(m_ppVarInputs[ind2.first][ind2.second], m_ppVarOutputs[1][0],
+					m_GF, m_GF.pLogTable[m_ppCheckConstraints[j][m_pCheckDegrees[j] - k - 1].second]);
+				BoxPlus(m_ppCheckOutputs[j][m_pCheckDegrees[j] - k], m_ppVarOutputs[1][0],
+					m_ppCheckOutputs[j][m_pCheckDegrees[j] - k - 1], m_GF.FieldSize_1);
 			}
 
-			for (unsigned k = 0; k <= m_GF.FieldSize_1; ++k)
+			PermuteVec(m_ppCheckOutputs[j][1], m_ppCheckOutputs[j][0], 
+				m_GF, m_GF.inverseDeg(m_ppCheckConstraints[j][0].second));
+			/*for (unsigned k = 0; k <= m_GF.FieldSize_1; ++k)
 			{
-				m_ppCheckOutputs[j][0][m_GF.multiplyConst(k, m_GF.inverseDeg(m_GF.pGF[m_ppCheckConstraints[j][0].second]))] 
+				m_ppCheckOutputs[j][0]
+					[m_GF.multiplyConst(k, m_GF.inverseDeg(m_ppCheckConstraints[j][0].second))] 
 					= m_ppCheckOutputs[j][1][k];
-				m_ppCheckOutputs[j][m_pCheckDegrees[j] - 1][m_GF.multiplyConst(k, m_GF.inverseDeg(m_GF.pGF[m_ppCheckConstraints[j][m_pCheckDegrees[j] - 1].second]))]
+				m_ppCheckOutputs[j][m_pCheckDegrees[j] - 1]
+					[m_GF.multiplyConst(k, m_GF.inverseDeg(m_ppCheckConstraints[j][m_pCheckDegrees[j] - 1].second))]
 					= m_ppCheckInputs[j][m_pCheckDegrees[j] - 2][k];
-			}
+			}*/
 			for(unsigned k = 1; k < m_pCheckDegrees[j] - 1; ++k)
 			{
-				GFSymbol tmpSym = m_GF.inverse(m_GF.pGF[m_ppCheckConstraints[j][k].second]);
-				BoxPlus(m_ppCheckOutputs[j][k + 1], tmpSym, m_ppCheckInputs[j][k - 1], tmpSym, m_GF, m_ppCheckOutputs[j][k]);
+				BoxPlus(m_ppCheckOutputs[j][k + 1], m_ppCheckInputs[j][k - 1], m_ppVarOutputs[0][0], m_GF.FieldSize_1);
+				PermuteVec(m_ppVarOutputs[0][0], m_ppCheckOutputs[j][k],
+					m_GF, m_GF.inverseDeg(m_ppCheckConstraints[j][k].second));
 			}
+			PermuteVec(m_ppCheckInputs[j][m_pCheckDegrees[j] - 2], m_ppCheckOutputs[j][m_pCheckDegrees[j] - 1],
+				m_GF, m_GF.inverseDeg(m_ppCheckConstraints[j][m_pCheckDegrees[j] - 1].second));
+
 		}
 
 		// 4. Reverse permutation step

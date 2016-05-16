@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <random>
 #include <ctime>
+#include <complex.h>
 
 using namespace std;
 
@@ -93,7 +94,7 @@ int main()
 		Extension = codec.GetFieldOrder();
 		unsigned Dimension = codec.GetDimension();
 		float Sigma = CalculateSigma(SNR, Length, Dimension * Extension);
-		mt19937 engine(time(nullptr));
+		mt19937 engine(0/*time(nullptr)*/);
 		normal_distribution<float> noiseGen(0, Sigma);
 		uniform_int_distribution<int> dataGen(0, codec.GetMaxFieldElement());
 		GFSymbol *pData = new GFSymbol[Dimension];
@@ -102,6 +103,10 @@ int main()
 		float *pNoisyData = new float[Length];
 		unsigned currentErrors = 0;
 		unsigned it = 0;
+		unsigned bitErrors = 0;
+		unsigned curBitErrors;
+		unsigned mlErrors = 0;
+		unsigned failures = 0;
 		for (it; it < NumOfIterations && currentErrors < NumOfErrors; ++it)
 		{
 			for (unsigned i = 0; i < Dimension; i++)
@@ -109,15 +114,38 @@ int main()
 			codec.Encode(pData, pEncoded);
 			for (unsigned i = 0; i < Length; i++)
 				pNoisyData[i] = codec.Modulate(pEncoded[i]) + noiseGen(engine);
-			codec.Decode(pNoisyData, pDecoded, NumOfDecoderIterations, Sigma * Sigma);
-
-			if (memcmp(pDecoded, pEncoded, sizeof(GFSymbol) * Length) != 0)
+			bool flag = codec.Decode(pNoisyData, pDecoded, NumOfDecoderIterations, Sigma * Sigma);
+			//modulate the codeword, and compare the euclidean distance
+			float MLCorr = 0., CurCorr = 0.;
+			for (unsigned i = 0; i < Length; i++)
+			{
+				MLCorr -= pow(codec.Modulate(pEncoded[i]) - pNoisyData[i], 2.);
+				CurCorr -= pow(codec.Modulate(pDecoded[i]) - pNoisyData[i], 2.);
+			}
+			if (!flag)
+			{
+				failures++;
+				curBitErrors = Length / 2;
+			}
+			else
+			{
+				curBitErrors = 0;
+				for (unsigned i = 0; i < Length; i++)
+					if (pDecoded[i] != pEncoded[i])
+						curBitErrors++;
+				if (CurCorr > MLCorr)
+					mlErrors++;
+			}
+			if (curBitErrors)//(memcmp(pDecoded, pEncoded, sizeof(GFSymbol) * Length) != 0)
 				currentErrors++;
-			
+
+			bitErrors += curBitErrors;
 			if (it > 0 && it % 1000 == 0)
 				cout << it << ' ' << (static_cast<float>(currentErrors) / it) <<  endl;
 		}
-		cerr << it << ' ' << (static_cast<float>(currentErrors) / it) << endl;
+		cerr << it << ' ' << (static_cast<float>(currentErrors) / it) 
+			<< ' ' << (static_cast<float>(bitErrors) / (Length * it)) 
+			<< ' ' << (static_cast<float>(mlErrors) / it) <<  endl;
 		system("pause");
 		delete[] pData;
 		delete[] pEncoded;
