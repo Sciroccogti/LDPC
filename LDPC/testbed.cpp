@@ -8,6 +8,8 @@
 
 using namespace std;
 
+char ** __argv;
+
 char *NextArgument()
 {
 	static int curArg = 1;
@@ -26,8 +28,9 @@ inline float CalculateSigma(float SNR, unsigned Length, unsigned BinDimension) {
 	return sqrtf(1.f / (2.f * powf(10.f, (SNR / 10.f)) * ((float)BinDimension / Length)));
 }
 
-int main()
+int main(int __argc, char* argv[])
 {
+	__argv = argv;
 	if(__argc != 9 && __argc != 4 && __argc != 8)
 	{
 		Usage();

@@ -1,8 +1,10 @@
 #pragma once
 #include <utility>
+#include <cmath>
+#include <cstring>
 
 typedef unsigned char tBit;
-typedef unsigned char GFSymbol;
+typedef int GFSymbol;
 typedef std::pair<unsigned, GFSymbol> GFPair;
 
 void BuildGF(unsigned Extension, GFSymbol* pGF, int* pLogTable);

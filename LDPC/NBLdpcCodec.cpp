@@ -1,5 +1,6 @@
 #include "NBLdpcCodec.h"
 #include <iostream>
+#include <cassert>
 
 NBLdpcCodec::NBLdpcCodec(unsigned Length, unsigned NumOfChecks, unsigned Extension, GFSymbol* pCheckMatrix): 
 	m_Length(Length), m_NumOfChecks(NumOfChecks), m_Type(L_OTHER)
@@ -76,7 +77,7 @@ NBLdpcCodec::NBLdpcCodec(std::string specFile): m_Type(L_OTHER)
 				C ^= m_GF.multiply(m_pGenMatrix[j * m_Length + pCurConstraints->first], pCurConstraints->second);
 				++pCurConstraints;
 			}
-			_ASSERT(C == 0);
+			assert(C == 0);
 		}
 	}
 	InitModem();

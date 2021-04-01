@@ -1,0 +1,9 @@
+{
+    "files.associations": {
+        "*.mcfunction": "mcfunction",
+        "*.cu": "cpp",
+        "*.cuh": "cpp",
+        "*.tcc": "cpp",
+        "utility": "cpp"
+    }
+}
